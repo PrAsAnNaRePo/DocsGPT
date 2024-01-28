@@ -89,7 +89,7 @@ if prompt := st.chat_input("Enter your message..."):
         st.markdown(prompt)
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
-        response = st.session_state.chat.send_message(prompt + '\nUse markdown to format to respond.')
+        response = st.session_state.chat.send_message(prompt)
         if response.candidates[0].content.parts[0].text == '':
             args = response.candidates[0].content.parts[0].function_call.args['query']
             if st.session_state.knowledge is not None:
