@@ -2,6 +2,7 @@ langchain
 pypdf
 PyPDF2
 chromadb
-google-generativeai
 langchain-google-genai
+langchain-community
 streamlit
+google-generativeai
