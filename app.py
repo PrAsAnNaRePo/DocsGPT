@@ -53,7 +53,7 @@ def loader_data(files):
                     try:
                         image_stream = BytesIO(img.data)
                         img = Image.open(image_stream)
-                        img_desc = gemini_vision.generate_content(["Generate a detailed description of the image. If it is a flow chart or diagram, please describe the contents of the image. If it is table, try to create a table exactly like in the image. write all the text in the image it it contains any text. Clearly explain the image in more detailed.", img]).candidates[0].content.parts[0].text
+                        img_desc = gemini_vision.generate_content(["Generate a detailed description of the image. If it is a flow chart, please create a flowchart that exactly as it is. If it is table, try to create a table exactly like in the image. write all the text in the image it it contains any text. Clearly explain the image in more detailed.\nAlso make sure give a nice heading to the image contant.", img]).candidates[0].content.parts[0].text
                         print("***************************")
                         print(img_desc)
                         print("***************************")
@@ -71,9 +71,11 @@ def loader_data(files):
         chunk_size = 1000
     elif num_pages <= 5:
         chunk_size = 2000
+    elif num_pages <= 10:
+        chunk_size = 3000
     else:
         chunk_size = 5000
-        
+
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=0)
     texts = text_splitter.split_text(total_content)
     try:
@@ -85,10 +87,22 @@ def loader_data(files):
 
 if "history" not in st.session_state:
     st.session_state.history = []
+
 if "knowledge" not in st.session_state:
     st.session_state.knowledge = None
 if "chat" not in st.session_state:
-    st.session_state.chat = gemini.start_chat(history=[])
+    st.session_state.chat = gemini.start_chat(history=[glm.Content(
+            parts=[glm.Part(
+                text="Your name is DocsGPT. You are very helpful and can assist with documents uploaded by the user. Use the vector_search tool/function to search for contents in the user attached or uploaded documents to you."
+            )],
+            role="user"
+        ),
+        glm.Content(
+            parts=[glm.Part(
+                text="Sure, i can do that for you."
+            )],
+            role="model"
+        )])
 
 for history in st.session_state.history:
     with st.chat_message(history["role"]):
