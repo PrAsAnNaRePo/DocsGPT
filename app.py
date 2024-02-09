@@ -1,4 +1,6 @@
 import os
+from io import BytesIO
+from PIL import Image
 import google.generativeai as genai
 import google.ai.generativelanguage as glm
 from langchain.vectorstores import Chroma
@@ -15,7 +17,7 @@ rag = glm.Tool(
     function_declarations=[
       glm.FunctionDeclaration(
         name='vector_search',
-        description="Returns the content of the document user attached. Make sure that your not passing query as a question use like keywords instead. Use this function to search for contents in the user attached or uploaded documents to you.",
+        description="Returns the content of the document user attached. Make sure that your not passing query as a question use like keywords instead. Use this function to search for contents in the user attached or uploaded documents to you. Try not to completly paste the user question as query, instead use keywords.",
         parameters=glm.Schema(
             type=glm.Type.OBJECT,
             properties={
@@ -28,6 +30,7 @@ rag = glm.Tool(
 )
 
 gemini = genai.GenerativeModel('gemini-pro', tools=[rag])
+gemini_vision = genai.GenerativeModel('gemini-pro-vision')
 
 class rawkn:
     def __init__(self, text):
@@ -38,18 +41,40 @@ class rawkn:
 def loader_data(files):
     file_type = files[0].type
     total_content = ''
+    num_pages = 0
     for file in files:
         if file_type == "application/pdf":
             pdf_reader = PdfReader(file)
             content = ''
             for page in pdf_reader.pages:
+                num_pages += 1
                 content += page.extract_text()
+                for img in page.images:
+                    try:
+                        image_stream = BytesIO(img.data)
+                        img = Image.open(image_stream)
+                        img_desc = gemini_vision.generate_content(["Generate a detailed description of the image. If it is a flow chart or diagram, please describe the contents of the image. If it is table, try to create a table exactly like in the image. write all the text in the image it it contains any text. Clearly explain the image in more detailed.", img]).candidates[0].content.parts[0].text
+                        print("***************************")
+                        print(img_desc)
+                        print("***************************")
+                        content += "Image content:\n" + img_desc
+                    except:
+                        print("cannot extract image")
+
         if file_type == "text/plain":
             content = file.read()
             content = content.decode("utf-8")
         total_content += content
-        print(total_content)
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
+    if num_pages <= 2:
+        chunk_size = 500
+    elif num_pages <= 3:
+        chunk_size = 1000
+    elif num_pages <= 5:
+        chunk_size = 2000
+    else:
+        chunk_size = 5000
+        
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=0)
     texts = text_splitter.split_text(total_content)
     try:
         embeddings = GoogleGenerativeAIEmbeddings(model = "models/embedding-001")
@@ -78,11 +103,10 @@ with st.sidebar:
     files = st.file_uploader("Upload a file", accept_multiple_files=True, type=["pdf", "txt"])
     process = st.button("Process")
     if process and files:
-        st.session_state.knowledge = loader_data(files)
         with st.spinner('loading your file. This may take a while...'):
             loader_data(files)
     
-            
+
 if prompt := st.chat_input("Enter your message..."):
     st.session_state.history.append({"role": "user", "text": prompt})
     with st.chat_message("user"):
@@ -93,7 +117,9 @@ if prompt := st.chat_input("Enter your message..."):
         if response.candidates[0].content.parts[0].text == '':
             args = response.candidates[0].content.parts[0].function_call.args['query']
             if st.session_state.knowledge is not None:
+                print("searching for ", args)
                 related_docs = str(st.session_state.knowledge.get_relevant_documents(args))
+                print(related_docs)
             else:
                 related_docs = 'No knowledge documents loaded'
             response = st.session_state.chat.send_message(
@@ -105,7 +131,7 @@ if prompt := st.chat_input("Enter your message..."):
                         )
                     )]
                 )
-            ).text
+            ).candidates[0].content.parts[0].text
         else:
             response = response.candidates[0].content.parts[0].text
         print(st.session_state.chat.history)
