@@ -127,27 +127,31 @@ if prompt := st.chat_input("Enter your message..."):
         st.markdown(prompt)
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
-        response = st.session_state.chat.send_message(prompt)
-        if response.candidates[0].content.parts[0].text == '':
-            args = response.candidates[0].content.parts[0].function_call.args['query']
-            if st.session_state.knowledge is not None:
-                print("searching for ", args)
-                related_docs = str(st.session_state.knowledge.get_relevant_documents(args))
-                print(related_docs)
+        try:
+            response = st.session_state.chat.send_message(prompt)
+            if response.candidates[0].content.parts[0].text == '':
+                args = response.candidates[0].content.parts[0].function_call.args['query']
+                if st.session_state.knowledge is not None:
+                    print("searching for ", args)
+                    related_docs = str(st.session_state.knowledge.get_relevant_documents(args))
+                    print(related_docs)
+                else:
+                    related_docs = 'No knowledge documents loaded'
+                response = st.session_state.chat.send_message(
+                    glm.Content(
+                        parts=[glm.Part(
+                            function_response = glm.FunctionResponse(
+                            name='vector_search',
+                            response={'rag': related_docs},
+                            )
+                        )]
+                    )
+                ).candidates[0].content.parts[0].text
             else:
-                related_docs = 'No knowledge documents loaded'
-            response = st.session_state.chat.send_message(
-                glm.Content(
-                    parts=[glm.Part(
-                        function_response = glm.FunctionResponse(
-                        name='vector_search',
-                        response={'rag': related_docs},
-                        )
-                    )]
-                )
-            ).candidates[0].content.parts[0].text
-        else:
-            response = response.candidates[0].content.parts[0].text
-        print(st.session_state.chat.history)
+                response = response.candidates[0].content.parts[0].text
+            print(st.session_state.chat.history)
+        except:
+            response = "I'm sorry, I cannot answer that question. please try again with a different question."
+
         message_placeholder.markdown(response)
     st.session_state.history.append({"role": "assistant", "text": response})
